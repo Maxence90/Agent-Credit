@@ -28,7 +28,7 @@ MVP 只证明最关键的五个动作：
 
 ## Product Scope
 
-黑客松版本聚焦最小可信 Demo，不试图一次性解决完整去中心化征信问题。
+本版本聚焦最小可信 Demo，不试图一次性解决完整去中心化征信问题。
 
 本版本重点实现：
 
@@ -68,7 +68,7 @@ MVP 只证明最关键的五个动作：
 
 ## Credit Model
 
-黑客松阶段采用足够直观的线性模型：
+本版本采用足够直观的线性模型：
 
 ```text
 activeCreditLimit = baseCreditLimit * reputationScore / 100
