@@ -5,6 +5,7 @@ import {
   type CreditDecision,
   type CreditPaymentRequest,
   type CreditRule,
+  type RepaymentRecord,
   type RepaymentSettlement,
   isAgentFrozen,
   isAgentRestricted,
@@ -14,7 +15,7 @@ function clampReputationScore(reputationScore: number): number {
   return Math.min(100, Math.max(0, reputationScore))
 }
 
-function roundMon(value: number): number {
+export function roundMon(value: number): number {
   return Math.round(value * 10000) / 10000
 }
 
@@ -46,8 +47,7 @@ export function calculateCreditLimit(baseCreditLimit: number, reputationScore: n
  * 计算 Agent 当前剩余可用信用额度。
  */
 export function calculateAvailableCredit(profile: AgentProfile): number {
-  const activeCreditLimit = calculateCreditLimit(profile.baseCreditLimit, profile.reputationScore)
-  return Math.max(0, roundMon(activeCreditLimit - profile.creditUsed))
+  return Math.max(0, roundMon(profile.activeCreditLimit - profile.creditUsed))
 }
 
 /**
@@ -144,16 +144,41 @@ export function applyCreditUsage(profile: AgentProfile, amount: number): AgentPr
 
   return {
     ...profile,
-    activeCreditLimit: calculateCreditLimit(profile.baseCreditLimit, profile.reputationScore),
     creditUsed: roundMon(profile.creditUsed + amount),
     lastCreditDecisionAt: new Date().toISOString(),
+  }
+}
+
+function buildRepaymentRecord(
+  profile: AgentProfile,
+  incomeAmount: number,
+  principalPaid: number,
+  feePaid: number,
+  remainingDebt: number,
+  timestamp: string,
+): RepaymentRecord {
+  const numericTimestamp = new Date(timestamp).getTime()
+  const recordSuffix = Number.isNaN(numericTimestamp) ? Date.now() : numericTimestamp
+
+  return {
+    repaymentId: `repayment-${profile.id}-${recordSuffix}`,
+    agentId: profile.id,
+    incomeAmount: roundMon(incomeAmount),
+    principalPaid: roundMon(principalPaid),
+    feePaid: roundMon(feePaid),
+    remainingDebt: roundMon(remainingDebt),
+    timestamp,
   }
 }
 
 /**
  * 模拟任务收入到账后对欠款进行自动还款。
  */
-export function settleIncomeRepayment(profile: AgentProfile, incomeAmount: number): RepaymentSettlement {
+export function settleIncomeRepayment(
+  profile: AgentProfile,
+  incomeAmount: number,
+  timestamp = new Date().toISOString(),
+): RepaymentSettlement {
   if (incomeAmount < 0) {
     throw new Error('收入金额不能为负数。')
   }
@@ -163,6 +188,8 @@ export function settleIncomeRepayment(profile: AgentProfile, incomeAmount: numbe
   const remainingDebt = roundMon(profile.creditUsed - principalPaid)
   const reputationBonus = principalPaid > 0 && remainingDebt === 0 ? 2 : principalPaid > 0 ? 1 : 0
   const newReputationScore = Math.min(100, profile.reputationScore + reputationBonus)
+  const settlementStatus =
+    principalPaid === 0 ? 'skipped' : remainingDebt === 0 ? 'settled' : 'partial'
 
   const newProfile: AgentProfile = {
     ...profile,
@@ -173,11 +200,23 @@ export function settleIncomeRepayment(profile: AgentProfile, incomeAmount: numbe
     repaymentStatus: remainingDebt === 0 ? 'healthy' : 'warning',
   }
 
+  const repaymentRecord = buildRepaymentRecord(
+    profile,
+    incomeAmount,
+    principalPaid,
+    0,
+    remainingDebt,
+    timestamp,
+  )
+
   return {
     principalPaid: roundMon(principalPaid),
     feePaid: 0,
     remainingDebt,
     newWalletBalance: newProfile.walletBalance,
+    reputationDelta: reputationBonus,
+    settlementStatus,
+    repaymentRecord,
     newProfile,
   }
 }

@@ -4,6 +4,9 @@ export type AgentStatus = 'active' | 'restricted' | 'frozen'
 export type RepaymentStatus = 'healthy' | 'warning' | 'overdue'
 export type CreditDecisionStatus = 'allowed' | 'review' | 'blocked'
 export type PaymentMode = 'simulated' | 'real'
+export type PaymentExecutionStatus = 'success' | 'failed' | 'rejected'
+export type PenaltySeverity = 'light' | 'medium' | 'severe'
+export type TimelineEventLevel = 'info' | 'success' | 'warning' | 'error'
 
 export interface AgentProfile {
   id: string
@@ -68,7 +71,74 @@ export interface RepaymentSettlement {
   feePaid: number
   remainingDebt: number
   newWalletBalance: number
+  reputationDelta: number
+  settlementStatus: 'settled' | 'partial' | 'skipped'
+  repaymentRecord: RepaymentRecord
   newProfile: AgentProfile
+}
+
+export interface PaymentExecutionResult {
+  txStatus: PaymentExecutionStatus
+  txHash?: string
+  simulated: boolean
+  amount: number
+  newCreditUsed: number
+  mode: PaymentMode
+  message: string
+  executedAt: string
+  updatedProfile?: AgentProfile
+}
+
+export interface PenaltyState {
+  severity: PenaltySeverity | null
+  isOverdue: boolean
+  penaltyApplied: boolean
+  overdueHours: number
+  currentCreditLimit: number
+  newCreditLimit: number
+  summary: string
+  newProfile: AgentProfile
+}
+
+export interface DemoCase {
+  id: string
+  title: string
+  description: string
+  agentId: string
+  request: CreditPaymentRequest
+  incomeAmount: number
+  currentTimestamp: string
+  expectedOutcome: string
+}
+
+export interface CreditDecisionPayload {
+  agentProfile: AgentProfile
+  creditRule: CreditRule
+  paymentRequest: CreditPaymentRequest
+}
+
+export interface ExecuteCreditPaymentPayload {
+  agentProfile: AgentProfile
+  paymentRequest: CreditPaymentRequest
+  decision: CreditDecision
+  mode?: PaymentMode
+}
+
+export interface SettleIncomePayload {
+  agentProfile: AgentProfile
+  incomeAmount: number
+  timestamp?: string
+}
+
+export interface CreditTimelineEvent {
+  id: string
+  title: string
+  detail: string
+  level: TimelineEventLevel
+  timestamp: string
+  txHash?: string
+  amount?: number
+  mode?: PaymentMode
 }
 
 export function isAgentActive(profile: AgentProfile): boolean {

@@ -1,6 +1,6 @@
 // 首页页面文件。
-// 负责组合项目说明区和 Day 1 仪表盘，作为当前版本的主展示页面。
-import { DayOneDashboard } from '@/components/day-one-dashboard'
+// 负责组合项目说明区和 Day 3 仪表盘，作为当前版本的主展示页面。
+import { AgentCreditDashboard } from '../components/agent-credit-dashboard'
 
 export default function HomePage() {
   return (
@@ -11,22 +11,22 @@ export default function HomePage() {
             Monad Credit Layer
           </span>
           <h1 className="mt-5 text-balance text-4xl font-semibold leading-tight text-ink md:text-6xl">
-            将 AI Agent 的可靠性转换为可消费的信用支付能力。
+            让 AI Agent 在 Monad 上拥有可透支、可回退、可解释的支付能力。
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-slate-600 md:text-lg">
-            这是 Agent Credit 的 Day 1 页面骨架：先完成评分、授信、决策三步静态闭环，证明 Agent 在余额不足时仍可基于信誉拿到支付能力。
+            这是 Agent Credit 的 Day 3 主演示页：在信用支付闭环基础上补齐 Monad 钱包入口、网络检测、支付模式切换、交易时间线和弱网回退。
           </p>
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           <Highlight label="核心公式" value="额度 = 基础额度 × 信誉分 / 100" />
-          <Highlight label="Day 1 范围" value="Profile / Request / Decision" />
-          <Highlight label="当前输出" value="allowed / review / blocked" />
+          <Highlight label="Day 3 范围" value="Wallet / Network / Timeline / Fallback" />
+          <Highlight label="支付模式" value="Simulated Default + Real Preview" />
         </div>
       </section>
 
       <section className="mt-8">
-        <DayOneDashboard />
+        <AgentCreditDashboard />
       </section>
     </main>
   )

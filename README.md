@@ -38,7 +38,9 @@ MVP 只证明最关键的五个动作：
 4. 模拟支付执行。
 5. 自动还款。
 6. 逾期惩罚。
-7. 成功路径和失败路径演示。
+7. Monad 钱包连接与网络检测。
+8. 交易时间线与状态回放。
+9. 成功路径和失败路径演示。
 
 本版本明确不做：
 
@@ -65,6 +67,12 @@ MVP 只证明最关键的五个动作：
 1. 超额度支付被 blocked。
 2. 冻结 Agent 无法继续发起信用支付。
 3. 不在白名单内的任务类型被 blocked 或 review。
+
+Day 3 在此基础上再补三层演示能力：
+
+1. 钱包连接与 Monad 网络状态展示。
+2. simulated 和 real preview 模式切换。
+3. 交易时间线与弱网回退提示。
 
 ## Credit Model
 
@@ -118,12 +126,15 @@ availableCredit = activeCreditLimit - creditUsed
 ```text
 src/
   app/
+    providers.tsx
     page.tsx
     api/
       credit-decision/
       execute-credit-payment/
       settle-income/
   components/
+    wallet-status-card.tsx
+    transaction-timeline.tsx
     agent-profile-card.tsx
     credit-request-form.tsx
     credit-decision-card.tsx
@@ -136,7 +147,141 @@ src/
     credit-engine.ts
     penalties.ts
     monad.ts
+  hooks/
+    use-wallet.ts
+    use-agent-credit.ts
 ```
+
+### Architecture Diagram
+
+```mermaid
+flowchart LR
+  A[Owner / Platform] --> B[Agent Profile]
+  B --> C[Credit Engine]
+  D[Credit Rule] --> C
+  E[Payment Request] --> C
+  C --> F{Decision}
+  F -->|allowed| G[Payment Execution]
+  F -->|review / blocked| H[Decision Explanation]
+  G --> I[creditUsed Increase]
+  I --> J[Transaction Timeline]
+  K[Task Income] --> L[Repayment Logic]
+  L --> M[Debt Reduced]
+  M --> J
+  M --> N[Penalty Engine]
+  N --> O[Restricted / Frozen State]
+  P[Wallet & Monad Network] --> G
+  Q[Simulated / Real Preview] --> G
+```
+
+这张图对应当前 Day 3 页面里的实际链路：
+
+1. Agent Profile 和 Credit Rule 决定决策输入。
+2. Credit Engine 输出 allowed、review、blocked。
+3. allowed 后进入 Payment Execution，并更新 creditUsed。
+4. 收入到账后进入 Repayment Logic，优先归还欠款。
+5. 若逾期未还，则由 Penalty Engine 输出 restricted 或 frozen。
+6. Wallet、Monad Network 和支付模式切换贯穿支付执行层。
+7. 所有关键动作都会被写入时间线面板。
+
+## Day 3 Highlights
+
+当前版本已经补齐 Day 3 所需的展示能力：
+
+1. 使用 wagmi + viem 提供浏览器钱包连接入口。
+2. 页面可识别当前是否在 Monad 网络，并支持发起切网。
+3. simulated 模式作为默认主路径，real 模式保留为可选 preview，未就绪时自动回退。
+4. 支付执行、收入结算、惩罚应用与场景切换都会进入时间线面板。
+5. 当接口不可用时，支付执行与收入结算都会自动回退到本地逻辑，保证现场演示连续性。
+
+## Environment Variables
+
+可选环境变量如下：
+
+```env
+NEXT_PUBLIC_MONAD_CHAIN_ID=10143
+NEXT_PUBLIC_MONAD_CHAIN_NAME=Monad Testnet
+NEXT_PUBLIC_MONAD_RPC_URL=https://testnet-rpc.monad.xyz
+NEXT_PUBLIC_MONAD_EXPLORER_URL=https://testnet.monadexplorer.com
+PAYMENT_MODE=simulated
+```
+
+说明：
+
+1. 不配置时会自动使用 README 中的 Day 3 默认值。
+2. 默认 PAYMENT_MODE 推荐保持为 simulated。
+3. 即使切换到 real preview，当前版本在未完成链上签名时也会自动回退到 simulated。
+
+## Run Locally
+
+```bash
+npm install
+npm run dev
+```
+
+打开 http://localhost:3000 后，建议按下面顺序演示：
+
+1. 先连接钱包，观察钱包与网络状态卡片。
+2. 切换 Demo Case，复现成功路径或失败路径。
+3. 执行信用支付，查看交易时间线是否记录结果。
+4. 触发收入结算与惩罚，观察时间线和 Agent 状态更新。
+
+## 3-Minute Pitch
+
+### 30 秒：问题定义
+
+今天很多 AI Agent 已经能完成搜索、调用工具和自动化任务，但一到支付这一步，往往还是要依赖人手动批准，或者提前给它充值一个预算钱包。
+
+这会有两个问题：
+
+1. 普通钱包风险太大，给 Agent 完整花钱权限不安全。
+2. 预算钱包只能花已有余额，表达不了 Agent 的信誉和未来回款能力。
+
+Agent Credit 解决的是这个缺口：不是“有余额才能支付”，而是“可信的 Agent 可以先支付，后还款”。
+
+### 60 秒：方案说明
+
+我们的模型非常简单，只保留最小闭环：
+
+1. Agent 有信誉分。
+2. 信誉分决定 activeCreditLimit。
+3. 当余额不足时，Agent 可以在信用额度内发起支付。
+4. 任务收入到账后，系统自动优先还款。
+5. 如果逾期，则触发罚分、降额甚至冻结。
+
+在实现上，我们把系统拆成四层：
+
+1. 前端展示层，负责 Agent 档案、请求、决策、执行、还款和惩罚。
+2. Credit Engine，负责额度计算和风控判断。
+3. Payment & Repayment 层，负责 simulated 或 real preview 支付，以及自动还款。
+4. Monad 接入层，负责钱包连接、网络检测和 Explorer 跳转。
+
+### 60 秒：现场演示路径
+
+现场演示时，我会这样走：
+
+1. 先连接浏览器钱包，展示当前是否在 Monad 网络。
+2. 选择高信誉 Agent，展示它虽然余额不足，但仍有可用信用额度。
+3. 发起一笔 0.5 MON 的服务支付请求。
+4. 系统根据额度、任务类型和状态规则输出 allowed。
+5. 执行支付后，creditUsed 增加，时间线记录执行结果。
+6. 随后模拟任务收入到账，系统自动还款，剩余负债下降。
+7. 如果切到失败路径，比如超额度或冻结 Agent，系统会直接 blocked，并解释原因。
+
+### 30 秒：为什么适合 Monad
+
+Monad 的定位很适合机器经济里的高频、小额支付。Agent Credit 不是要把 AI 变成一个无约束的钱包，而是把它的可靠性转成一条可控、可回退、可惩罚的信用支付线。
+
+所以这个项目的重点不是“AI 能不能点支付按钮”，而是“AI 在没有即时余额时，能不能基于信誉稳定完成支付，并在之后自动结算”。
+
+## Demo Talking Points
+
+如果评委追问，可以优先这样回答：
+
+1. 为什么默认 simulated：因为主 demo 稳定性优先，real 模式是加分项，当前已保留入口并可回退。
+2. 信誉分从哪里来：当前版本使用平台型信誉输入，先证明支付闭环，去中心化征信留在 roadmap。
+3. 为什么不是普通预算钱包：预算钱包只表达余额，Agent Credit 表达的是信誉驱动的支付能力。
+4. 怎么控制风险：通过任务类型白名单、额度上限、冻结状态检查、逾期惩罚和自动还款优先级共同控制。
 
 ## What Goes On-Chain
 
@@ -185,13 +330,11 @@ MVP 之后可以继续扩展：
 
 ## Current Repository Status
 
-当前仓库以项目说明为主，README 对外描述了产品目标、核心闭环和实现方向。后续代码落地可优先从以下模块开始：
+当前仓库已经完成 Day 1 到 Day 3 的 MVP 主体：
 
-1. lib/types.ts
-2. lib/mock-data.ts
-3. lib/credit-engine.ts
-4. lib/penalties.ts
-5. 单页 Demo UI
+1. Day 1：静态授信、决策和主页面骨架。
+2. Day 2：支付执行、收入还款、惩罚和固定 Demo 用例。
+3. Day 3：钱包连接、Monad 网络检测、支付模式切换、交易时间线和弱网回退。
 
 ## License
 
